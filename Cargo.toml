@@ -1,0 +1,15 @@
+[package]
+name = "json-streamparse-rs"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.74"
+description = "Streaming JSON balance detector: feed bytes incrementally, ask whether the buffer currently holds a complete top-level value. String/escape aware. Zero deps."
+authors = ["Mukunda Rao Katta <mukunda.vjcs6@gmail.com>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/MukundaKatta/json-streamparse-rs"
+homepage = "https://github.com/MukundaKatta/json-streamparse-rs"
+documentation = "https://docs.rs/json-streamparse-rs"
+readme = "README.md"
+keywords = ["json", "stream", "balance", "llm", "incremental"]
+categories = ["parsing", "text-processing"]
+exclude = [".github/*", "target/*"]
