@@ -9,7 +9,8 @@
 //! every prefix.
 //!
 //! String-aware (won't be fooled by `{` inside a string literal),
-//! escape-aware (`\\\"` doesn't end the string).
+//! escape-aware (`\\\"` doesn't end the string), and bracket-type aware
+//! (`{...]` and stray closers like `}` are reported as broken, not complete).
 //!
 //! ## Example
 //!
@@ -27,10 +28,16 @@
 /// Streaming JSON balance detector.
 #[derive(Debug, Default, Clone)]
 pub struct Balancer {
-    depth: i32,
+    /// Stack of currently-open bracket bytes (`b'{'` or `b'['`).
+    /// Its length is the current nesting depth.
+    open: Vec<u8>,
     started: bool,
     in_string: bool,
     escape: bool,
+    /// Set once the input is structurally broken (a closing bracket with
+    /// nothing open, or a closer that does not match the most recent opener).
+    /// Once broken, the buffer can never be `complete()` again until `reset()`.
+    broken: bool,
     bytes_consumed: u64,
 }
 
@@ -56,12 +63,17 @@ impl Balancer {
             }
             match b {
                 b'{' | b'[' => {
-                    self.depth += 1;
+                    self.open.push(b);
                     self.started = true;
                 }
                 b'}' | b']' => {
-                    if self.depth > 0 {
-                        self.depth -= 1;
+                    let want = if b == b'}' { b'{' } else { b'[' };
+                    match self.open.pop() {
+                        // Closer matches the most recent opener: good.
+                        Some(opener) if opener == want => {}
+                        // Wrong closer type, or a closer with nothing open:
+                        // the structure is malformed.
+                        _ => self.broken = true,
                     }
                 }
                 b'"' => {
@@ -76,15 +88,26 @@ impl Balancer {
         }
     }
 
-    /// True when the input so far is non-empty and bracket-balanced
-    /// (depth = 0) and not currently mid-string.
+    /// True when the input so far is non-empty, structurally sound, fully
+    /// bracket-balanced (depth = 0) and not currently mid-string.
+    ///
+    /// Returns `false` if the input is [`broken`](Self::broken) (e.g. an
+    /// unmatched closing bracket or a mismatched bracket pair like `{...]`).
     pub fn complete(&self) -> bool {
-        self.started && self.depth == 0 && !self.in_string
+        self.started && !self.broken && self.open.is_empty() && !self.in_string
+    }
+
+    /// True if the input is structurally broken: a closing bracket appeared
+    /// with nothing open, or a closer did not match its opener (e.g. `{]`).
+    /// A broken buffer can never become [`complete`](Self::complete) again
+    /// until [`reset`](Self::reset).
+    pub fn broken(&self) -> bool {
+        self.broken
     }
 
     /// Current bracket depth (0 at the root).
     pub fn depth(&self) -> i32 {
-        self.depth
+        self.open.len() as i32
     }
 
     /// Bytes consumed so far.
